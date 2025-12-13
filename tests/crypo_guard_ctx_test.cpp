@@ -33,6 +33,25 @@ TEST(CryptoGuardCtx, EncryptValidInputStream) {
     }
 }
 
+// Тест повторного шифрования корректного входного строкового потока
+TEST(CryptoGuardCtx, DoubleEncryptValidInputStream) {
+    // Цикл по вариантам тестовых строк
+    for (const std::string &rTestStr : testStrings) {
+        CryptoGuard::CryptoGuardCtx cryptoCtx;
+        std::stringstream inStream(rTestStr);                 // входной строковый поток
+        std::stringstream outStream;                          // выходной строковый поток с зашифрованными данными
+        cryptoCtx.EncryptFile(inStream, outStream, MY_PASS);  // шифруем данные с заданным паролем
+        std::string firstOutput = outStream.str();            // запомним результат первого прохода
+
+        // Повторное шифрование должно пройти без исключений
+        ASSERT_NO_THROW(cryptoCtx.EncryptFile(inStream, outStream, MY_PASS));
+        // Выходной поток должен быть не пустой
+        EXPECT_FALSE(outStream.str().empty());
+        // Результат второго прохода должен совпадать с результатом первого прохода
+        EXPECT_EQ(outStream.str(), firstOutput);
+    }
+}
+
 // Тест шифрования некорректного входного строкового потока
 TEST(CryptoGuardCtx, EncryptInvalidInputStream) {
     // Цикл по вариантам тестовых строк
@@ -78,6 +97,24 @@ TEST(CryptoGuardCtx, DecryptWithCorrectPass) {
         // Дешифрование с правильным паролем должно пройти без исключений
         ASSERT_NO_THROW(cryptoCtx.DecryptFile(encryptedStream, decryptedStream, MY_PASS));
         // Проверяем, что получили исходную тестовую строку
+        EXPECT_EQ(rTestStr, decryptedStream.str());
+    }
+}
+
+// Тест повторного дешифрования корректного входного строкового потока с правильным паролем
+TEST(CryptoGuardCtx, DoubleDecryptWithCorrectPass) {
+    // Цикл по вариантам тестовых строк
+    for (const std::string &rTestStr : testStrings) {
+        CryptoGuard::CryptoGuardCtx cryptoCtx;
+        std::stringstream inStream(rTestStr);                       // входной строковый поток
+        std::stringstream encryptedStream;                          // выходной строковый поток с зашифрованными данными
+        std::stringstream decryptedStream;                          // выходной строковый поток с дешифрованными данными
+        cryptoCtx.EncryptFile(inStream, encryptedStream, MY_PASS);  // шифруем данные
+        cryptoCtx.DecryptFile(encryptedStream, decryptedStream, MY_PASS);  // дешифруем данные
+
+        // Повторное дешифрование должно пройти без исключений
+        ASSERT_NO_THROW(cryptoCtx.DecryptFile(encryptedStream, decryptedStream, MY_PASS));
+        // Проверяем, что получили исходную тестовую строку (выходной поток перезаписыается, а не дополняется)
         EXPECT_EQ(rTestStr, decryptedStream.str());
     }
 }

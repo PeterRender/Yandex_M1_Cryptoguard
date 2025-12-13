@@ -8,12 +8,6 @@
 
 namespace CryptoGuard {
 
-// Создадим пользовательский "удалитель" контекста OpenSSL с помощью лямбда-функции
-// Согласно документации OpenSSL для EVP_CIPHER_CTX_free значение nullptr является валидным (проверка не нужна)
-auto EVP_CIPHER_CTX_Deleter = [](EVP_CIPHER_CTX *ctx) { EVP_CIPHER_CTX_free(ctx); };
-// Обернем "удалитель" в псевдоним (т.к. имя лямбды генерирует компилятор, то указываем ее тип с помощью decltype)
-using EVP_CIPHER_CTX_Ptr = std::unique_ptr<EVP_CIPHER_CTX, decltype(EVP_CIPHER_CTX_Deleter)>;
-
 // Внутренний класс, реализующий функционал класса CryptoGuardCtx
 class CryptoGuardCtx::Impl {
 public:
@@ -34,9 +28,18 @@ public:
     void DecryptFileImpl(std::iostream &inStream, std::iostream &outStream, std::string_view password);
 
     // Метод, реализующий подсчёт контрольной суммы файла в API класса CryptoGuardCtx.
-    std::string CalculateChecksumImpl(std::iostream &inStream) { return "NOT_IMPLEMENTED"; }
+    std::string CalculateChecksumImpl(std::iostream &inStream);
 
 private:
+    // Создадим псевдоним умного указателя на контекст шифрования OpenSSL с пользовательским "удалителем".
+    // "Удалитель" реализован с помощью лямбда-функции (т.к. имя лямбды генерирует компилятор, ее тип указан через
+    // decltype). Для EVP_CIPHER_CTX_free значение nullptr является валидным, поэтому проверка не нужна
+    using EVP_CIPHER_CTX_Ptr =
+        std::unique_ptr<EVP_CIPHER_CTX, decltype([](EVP_CIPHER_CTX *ctx) { EVP_CIPHER_CTX_free(ctx); })>;
+
+    // Создадим псевдоним умного указателя на хеш-контекст OpenSSL аналогично контексту шифрования
+    using EVP_MD_CTX_Ptr = std::unique_ptr<EVP_MD_CTX, decltype([](EVP_MD_CTX *mdctx) { EVP_MD_CTX_free(mdctx); })>;
+
     // Параметры AES-256 шифрования (Advanced Encryption Standard - симметричный алгоритм блочного шифрования)
     struct AesCipherParams {
         static const size_t KEY_SIZE = 32;  // размер ключа шифрования AES-256, в байтах
@@ -79,6 +82,28 @@ private:
         return params;
     }
 
+    // Подготавливает строковый поток к операции чтения/записи.
+    void PrepareStreamForIO(std::iostream &strStream, bool isInput) {
+        // Проверка состояния потока на критические ошибки
+        if (strStream.bad()) {
+            throw std::runtime_error{std::format("{} stream is corrupted", isInput ? "Input" : "Output")};
+        }
+
+        // Сброс всех флагов состояния (goodbit, eofbit, failbit, badbit)
+        strStream.clear();
+
+        // Установка позиции в начало
+        if (isInput)
+            strStream.seekg(0, std::ios::beg);  // для чтения
+        else
+            strStream.seekp(0, std::ios::beg);  // для записи
+
+        // Проверка успешного перехода в начало потока
+        if (strStream.fail()) {
+            throw std::runtime_error{std::format("Failed to seek {} stream", isInput ? "input" : "output")};
+        }
+    }
+
     // Метод, реализующий шифрование/дешифрование строкового потока файла
     void DoCrypt(std::iostream &inStream, std::iostream &outStream, std::string_view password, int doEncrypt);
 };
@@ -86,29 +111,25 @@ private:
 // Метод, реализующий шифрование/дешифрование строкового потока файла
 void CryptoGuardCtx::Impl::DoCrypt(std::iostream &inStream, std::iostream &outStream, std::string_view password,
                                    int doEncrypt) {
-    // Проверка состояний входного и выходного потоков перед шифрованием
-    if (!inStream.good()) {
-        throw std::runtime_error{"Input stream is not ready for I/O operations"};
-    }
-    if (!outStream.good()) {
-        throw std::runtime_error{"Output stream is not ready for I/O operations"};
-    }
+    // Подготовка входного и выходного потоков
+    PrepareStreamForIO(inStream, true);    // к операции чтения
+    PrepareStreamForIO(outStream, false);  // к операции записи
 
-    // Создание контекста OpenSSL с умным указателем
+    // Создание контекста шифрования OpenSSL с умным указателем
     EVP_CIPHER_CTX_Ptr ctx(EVP_CIPHER_CTX_new());
     if (!ctx) {
-        throw std::runtime_error{"Failed to create OpenSSL context"};
+        throw std::runtime_error{"Failed to create OpenSSL cipher context"};
     }
 
     // Создание ключа шифрования AES-256 из пароля пользователя
-    AesCipherParams params = CreateCipherParamsFromPassword(password);  // здесь работает RVO-оптимизация компилятора.
+    AesCipherParams params = CreateCipherParamsFromPassword(password);  // работает RVO-оптимизация, копирования нет
     params.encrypt = doEncrypt;  // указываем OpenSSL тип выполняемой операции (0 - дешифрование, 1 - шифрование)
 
     // Согласно документации OpenSSL (https://docs.openssl.org/master/man3/EVP_EncryptInit/#examples) инициализация
-    // контекста OpenSSL выполняется с помощью EVP_CipherInit_ex2 (вместо deprecated EVP_CipherInit_ex) в два этапа:
-    // 1) сначала нужно получить длины ключа шифрования и вектора инициализации и проверить их значения (для AES-256-CBC
-    // они должны быть 32 и 16 байт); 2) затем выполняется инициализация контекста OpenSSL значениями ключа шифрования и
-    // вектора инициализации
+    // контекста шифрования OpenSSL выполняется с помощью EVP_CipherInit_ex2 (вместо deprecated EVP_CipherInit_ex) в два
+    // этапа: 1) сначала нужно получить длины ключа шифрования и вектора инициализации и проверить их значения (для
+    // AES-256-CBC они должны быть 32 и 16 байт); 2) затем выполняется инициализация контекста шифрования OpenSSL
+    // значениями ключа шифрования и вектора инициализации
 
     // Получение длин ключа шифрования и вектора инициализации
     if (!EVP_CipherInit_ex2(ctx.get(), params.cipher, nullptr, nullptr, params.encrypt, nullptr)) {
@@ -119,7 +140,7 @@ void CryptoGuardCtx::Impl::DoCrypt(std::iostream &inStream, std::iostream &outSt
         EVP_CIPHER_CTX_get_iv_length(ctx.get()) != AesCipherParams::IV_SIZE) {
         throw std::runtime_error{"Invalid key or IV length"};
     }
-    // Инициализация контекста OpenSSL значениями ключа шифрования и вектора инициализации
+    // Инициализация контекста шифрования OpenSSL значениями ключа шифрования и вектора инициализации
     if (!EVP_CipherInit_ex2(ctx.get(), nullptr, params.key.data(), params.iv.data(), params.encrypt, nullptr)) {
         throw std::runtime_error{"Failed to initialize OpenSSL context"};
     }
@@ -189,6 +210,14 @@ void CryptoGuardCtx::Impl::DecryptFileImpl(std::iostream &inStream, std::iostrea
     DoCrypt(inStream, outStream, password, 0);
 }
 
+// Метод, реализующий подсчёт контрольной суммы файла в API класса CryptoGuardCtx.
+std::string CryptoGuardCtx::Impl::CalculateChecksumImpl(std::iostream &inStream) {
+    // Подготовка входного потока к операции чтения.
+    PrepareStreamForIO(inStream, true);
+
+    return "Not implemented yet";
+}
+
 // Определение конструктора по-умолчанию класса CryptoGuardCtx
 CryptoGuardCtx::CryptoGuardCtx()
     : pImpl_(std::make_unique<Impl>())  // создаем экземпляр внутреннего класса Impl
@@ -197,15 +226,18 @@ CryptoGuardCtx::CryptoGuardCtx()
 // Явное определение деструктора по-умолчанию класса CryptoGuardCtx
 CryptoGuardCtx::~CryptoGuardCtx() = default;
 
-// Методы-обертки, делегирующие вызовы API класса CryptoGuardCtx внутреннему классу Impl
+// === Методы-обертки, делегирующие вызовы API класса CryptoGuardCtx внутреннему классу Impl ===
+// Метод шифрования файла.
 void CryptoGuardCtx::EncryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) {
     pImpl_->EncryptFileImpl(inStream, outStream, password);
 }
 
+// Метод дешифрования файла.
 void CryptoGuardCtx::DecryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) {
     pImpl_->DecryptFileImpl(inStream, outStream, password);
 }
 
+// Метод подсчета контрольной суммы файла.
 std::string CryptoGuardCtx::CalculateChecksum(std::iostream &inStream) {
     return pImpl_->CalculateChecksumImpl(inStream);
 }
