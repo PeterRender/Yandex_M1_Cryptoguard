@@ -232,3 +232,27 @@ TEST(CryptoGuardCtx, ChecksumAfterEncryptDecrypt) {
         EXPECT_EQ(checksumBefore, checksumAfter);
     }
 }
+
+// ====== ДОПОЛНИТЕЛЬНЫЕ ТЕСТЫ ======
+
+// Тест расшифровки OpenSSl-ошибки при дешифровании с неправильным паролем
+TEST(CryptoGuardCtx, ExtendedOpenSSLError) {
+    // Цикл по вариантам тестовых данных
+    for (const TestData &rTestData : testVec) {
+        CryptoGuard::CryptoGuardCtx cryptoCtx;
+        std::stringstream inStream(rTestData.inputStr);             // входной строковый поток
+        std::stringstream encryptedStream;                          // выходной строковый поток с зашифрованными данными
+        std::stringstream decryptedStream;                          // выходной строковый поток с дешифрованными данными
+        cryptoCtx.EncryptFile(inStream, encryptedStream, MY_PASS);  // шифруем данные с заданным паролем
+
+        // Попытка дешифрования с неправильным паролем должна дать текстовую OpenSSl-ошибку
+        try {
+            cryptoCtx.DecryptFile(encryptedStream, decryptedStream, MY_PASS + "123");
+            FAIL() << "Expected std::runtime_error";
+        } catch (const std::runtime_error &e) {
+            std::string errorMsg = e.what();
+            // В сообщении должны быть ключевые слова OpenSSL-ошибки
+            EXPECT_TRUE(errorMsg.find("error:") != std::string::npos && errorMsg.find("routines") != std::string::npos);
+        }
+    }
+}
