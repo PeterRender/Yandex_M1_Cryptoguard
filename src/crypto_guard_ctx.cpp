@@ -16,12 +16,15 @@ class CryptoGuardCtx::Impl {
 public:
     // Конструктор по умолчанию.
     Impl() {
-        OpenSSL_add_all_algorithms();  // инициализация библиотеки OpenSSL
+        // OpenSSL 1.1.0+ не требует явной инициализации (OpenSSL_add_all_algorithms() - deprecated)
+        // В библиотеке реализована lazy-инициализация при первом использовании
+        // https://docs.openssl.org/master/man3/OpenSSL_add_all_algorithms/
     }
 
     // Деструктор
     ~Impl() {
-        EVP_cleanup();  // освобождение ресурсов, выделенных для библиотеки OpenSSL
+        // OpenSSL 1.1.0+ автоматически управляет своими ресурсами
+        // Явная очистка не требуется (EVP_cleanup() - deprecated)
     }
 
     // Метод, реализующий шифрование файла в API класса CryptoGuardCtx.
