@@ -1,9 +1,11 @@
 #include "crypto_guard_ctx.h"
-#include <array>   // для подключения шаблона статического массива
-#include <format>  // для подключения шаблона форматируемой строки
+#include <array>    // для подключения шаблона статического массива
+#include <format>   // для подключения шаблона форматируемой строки
+#include <iomanip>  // для форматирования строкового потока
 #include <iostream>
 #include <memory>         // для подключения std::unique_ptr
 #include <openssl/evp.h>  // для подключения OpenSSL функций
+#include <sstream>
 #include <stdexcept>
 
 namespace CryptoGuard {
@@ -215,7 +217,61 @@ std::string CryptoGuardCtx::Impl::CalculateChecksumImpl(std::iostream &inStream)
     // Подготовка входного потока к операции чтения.
     PrepareStreamForIO(inStream, true);
 
-    return "Not implemented yet";
+    // Создание хеш-контекста OpenSSL с умным указателем
+    EVP_MD_CTX_Ptr mdctx(EVP_MD_CTX_new());
+    if (!mdctx) {
+        throw std::runtime_error{"Failed to create hash context"};
+    }
+
+    // Инициализация хеш-контекста OpenSSL алгоритмом SHA-256
+    // (функция EVP_sha256() возвращает указатель на структуру, описывающую алгоритм SHA-256)
+    if (!EVP_DigestInit_ex(mdctx.get(), EVP_sha256(), nullptr)) {
+        throw std::runtime_error{"Failed to initialize hash context with SHA-256"};
+    }
+
+    // Создание буфера для чтения входных данных (чтение реализуется порционно для поддержки больших файлов)
+    static const size_t BUF_SIZE = 1024;  // размер буфера, в байтах (кратен 64 байтам - размеру блока в SHA-256)
+    std::array<unsigned char, BUF_SIZE> inBuf{};
+
+    // Цикл подсчета хеша входных данных
+    while (true) {
+        // Чтение данных из входного потока в буфер
+        inStream.read(reinterpret_cast<char *>(inBuf.data()), inBuf.size());
+        // Проверка состояния входного потока после чтения данных
+        if (inStream.bad()) {
+            throw std::runtime_error{"Failed to read data from input stream"};
+        }
+
+        // Получение числа фактически прочитанных байт (может быть < BUF_SIZE в конце файла)
+        auto bytesRead = inStream.gcount();
+        if (bytesRead <= 0)  // дошли до конца потока (-1) или все блоки были уже извлечены ранее (0)
+            break;
+
+        // Обновление хеша входных данных
+        if (!EVP_DigestUpdate(mdctx.get(), inBuf.data(), bytesRead)) {
+            throw std::runtime_error{"Failed to update hash"};
+        }
+    }
+
+    // Создание буфера для финального хеша
+    std::array<unsigned char, EVP_MAX_MD_SIZE> hashResult{};  // длина буфера = max размеру хеша в OpenSSL
+    unsigned int hashLength = 0;  // сюда запишется реальная длина хеша (для SHA256 - 32 байта)
+
+    // Получение финального хеша
+    if (!EVP_DigestFinal_ex(mdctx.get(), hashResult.data(), &hashLength)) {
+        throw std::runtime_error{"Failed to finalize hash"};
+    }
+
+    // Создание строкового потока для преобразования хеша в hex-строку
+    std::stringstream hexStream;
+    hexStream << std::hex << std::setfill('0');
+
+    // Каждый байт хеша преобразуем в два hex-символа (setw(2) гарантирует вывод вида 0x0F -> "0f")
+    for (unsigned int i = 0; i < hashLength; i++) {
+        hexStream << std::setw(2) << static_cast<int>(hashResult[i]);
+    }
+
+    return hexStream.str();
 }
 
 // Определение конструктора по-умолчанию класса CryptoGuardCtx
