@@ -3,9 +3,11 @@
 
 namespace CryptoGuard {
 
+// Конструктор по умолчанию
 ProgramOptions::ProgramOptions() : desc_("Allowed options") {
     namespace po = boost::program_options;
 
+    // Добавление в хранилище опций командной строки приложения CryptoGuard
     desc_.add_options()
         // Опция help
         ("help,h", "produce help message")
@@ -19,8 +21,10 @@ ProgramOptions::ProgramOptions() : desc_("Allowed options") {
         ("password,p", po::value<std::string>(), "password (required for encrypt/decrypt command)");
 }
 
+// Деструктор по умолчанию
 ProgramOptions::~ProgramOptions() = default;
 
+// Метод, реализующий парсинг (разбор) аргументов командной строки
 void ProgramOptions::Parse(int argc, char *argv[]) {
     namespace po = boost::program_options;
 

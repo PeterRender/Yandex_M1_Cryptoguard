@@ -6,9 +6,10 @@
 
 namespace CryptoGuard {
 
+// Класс
 class CryptoGuardCtx {
 public:
-    // Конструктор по-умолчанию.
+    // Конструктор по умолчанию.
     CryptoGuardCtx();
     // Деструктор
     ~CryptoGuardCtx();
@@ -21,15 +22,19 @@ public:
     CryptoGuardCtx(CryptoGuardCtx &&) noexcept = default;
     CryptoGuardCtx &operator=(CryptoGuardCtx &&) noexcept = default;
 
-    // API
+    // Метод, реализующий шифрование файла
     void EncryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password);
+
+    // Метод, реализующий дешифрование файла
     void DecryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password);
+
+    // Метод, реализующий подсчёт контрольной суммы файла
     std::string CalculateChecksum(std::iostream &inStream);
 
 private:
     class Impl;  // предварительное объявление класса, реализующего функционал класса CryptoGuardCtx
     std::experimental::propagate_const<std::unique_ptr<Impl>>
-        pImpl_;  // умный указатель, владеющий объектом класса Impl
+        pImpl_;  // умный указатель, владеющий объектом класса Impl, с оберткой, обеспечивающей const-correctness.
 };
 
 }  // namespace CryptoGuard

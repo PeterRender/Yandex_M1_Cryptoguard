@@ -1,59 +1,25 @@
 #include "cmd_options.h"
 #include "crypto_guard_ctx.h"
-#include <algorithm>
+#include <format>   // для подключения шаблона форматируемой строки
+#include <fstream>  // для работы с файловыми потоками
 #include <iostream>
-#include <openssl/evp.h>
 #include <print>
 #include <stdexcept>
 #include <string>
 
 int main(int argc, char *argv[]) {
     try {
-        /*         //
-                // OpenSSL пример использования:
-                //
-                std::string input = "01234567890123456789";
-                std::string output;
+        // Вспомогательная лямбда-функция для открытия файлов с обработкой ошибок
+        auto OpenFile = [](const std::string &filename, std::ios::openmode mode) {
+            std::fstream file(filename, mode);
+            if (!file.is_open()) {
+                const char *fileType = (mode & std::ios::in) ? "input" : "output";  // тип файла по режиму открытия
+                throw std::runtime_error{std::format("Failed to open {} file '{}'", fileType, filename)};
+            }
+            return file;
+        };
 
-                OpenSSL_add_all_algorithms();
-
-                auto params = CreateChiperParamsFromPassword("12341234");
-                params.encrypt = 1;
-                auto *ctx = EVP_CIPHER_CTX_new();
-
-                // Инициализируем cipher
-                EVP_CipherInit_ex(ctx, params.cipher, nullptr, params.key.data(), params.iv.data(), params.encrypt);
-
-                std::vector<unsigned char> outBuf(16 + EVP_MAX_BLOCK_LENGTH);
-                std::vector<unsigned char> inBuf(16);
-                int outLen;
-
-                // Обрабатываем первые N символов
-                std::copy(input.begin(), std::next(input.begin(), 16), inBuf.begin());
-                EVP_CipherUpdate(ctx, outBuf.data(), &outLen, inBuf.data(), static_cast<int>(16));
-                for (int i = 0; i < outLen; ++i) {
-                    output.push_back(outBuf[i]);
-                }
-
-                // Обрабатываем оставшиеся символы
-                std::copy(std::next(input.begin(), 16), input.end(), inBuf.begin());
-                EVP_CipherUpdate(ctx, outBuf.data(), &outLen, inBuf.data(), static_cast<int>(input.size() - 16));
-                for (int i = 0; i < outLen; ++i) {
-                    output.push_back(outBuf[i]);
-                }
-
-                // Заканчиваем работу с cipher
-                EVP_CipherFinal_ex(ctx, outBuf.data(), &outLen);
-                for (int i = 0; i < outLen; ++i) {
-                    output.push_back(outBuf[i]);
-                }
-                EVP_CIPHER_CTX_free(ctx);
-                std::print("String encoded successfully. Result: '{}'\n\n", output);
-                EVP_cleanup();
-                //
-                // Конец примера
-                // */
-
+        // Создание объекта-хелпера для извлечения параметров приложения CryptoGuard из командной строки
         CryptoGuard::ProgramOptions options;
 
         try {
@@ -64,24 +30,52 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
+        // Создание объекта-хелпера, реализующего API приложения CryptoGuard
         CryptoGuard::CryptoGuardCtx cryptoCtx;
 
+        // Задание краткого псевдонима для типа крипто-команды приложения CryptoGuard
         using COMMAND_TYPE = CryptoGuard::ProgramOptions::COMMAND_TYPE;
+
+        // Обработка крипто-команды, полученной от пользователя
         switch (options.GetCommand()) {
-        case COMMAND_TYPE::ENCRYPT:
-            std::print("File encoded successfully\n");
-            break;
+        // Команда шифрования файла
+        case COMMAND_TYPE::ENCRYPT: {
+            // Открытие входного файла в бинарном режиме для чтения
+            auto inFile = OpenFile(options.GetInputFile(), std::ios::in | std::ios::binary);
+            // Открытие выходного файла в бинарном режиме для записи
+            auto outFile = OpenFile(options.GetOutputFile(), std::ios::out | std::ios::binary);
 
-        case COMMAND_TYPE::DECRYPT:
-            std::print("File decoded successfully\n");
+            // Шифрование входного файла с помощью объекта-хелпера
+            cryptoCtx.EncryptFile(inFile, outFile, options.GetPassword());
+            std::print("File '{}' is encrypted successfully\n", options.GetInputFile());
             break;
+        }
+        // Команда дешифрования файла
+        case COMMAND_TYPE::DECRYPT: {
+            // Открытие входного файла в бинарном режиме для чтения
+            auto inFile = OpenFile(options.GetInputFile(), std::ios::in | std::ios::binary);
+            // Открытие выходного файла в бинарном режиме для записи
+            auto outFile = OpenFile(options.GetOutputFile(), std::ios::out | std::ios::binary);
 
-        case COMMAND_TYPE::CHECKSUM:
-            std::print("Checksum: {}\n", "CHECKSUM_NOT_IMPLEMENTED");
+            // Дешифрование входного файла с помощью объекта-хелпера
+            cryptoCtx.DecryptFile(inFile, outFile, options.GetPassword());
+            std::print("File '{}' is decrypted successfully\n", options.GetInputFile());
             break;
+        }
+        // Команда подсчета контрольной суммы файла
+        case COMMAND_TYPE::CHECKSUM: {
+            // Открытие входного файла в бинарном режиме для чтения
+            auto inFile = OpenFile(options.GetInputFile(), std::ios::in | std::ios::binary);
 
-        default:
-            throw std::runtime_error{"Unsupported command"};
+            // Подсчет контрольной суммы файла с помощью объекта-хелпера
+            std::string checksum = cryptoCtx.CalculateChecksum(inFile);
+            std::print("Checksum (SHA-256) of '{}' is {}\n", options.GetInputFile(), checksum);
+            break;
+        }
+        // Нераспознанный тип команды
+        default: {
+            throw std::runtime_error{"Unsupported command type"};
+        }
         }
 
     } catch (const std::exception &e) {
