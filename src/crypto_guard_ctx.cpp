@@ -27,11 +27,8 @@ public:
         // Явная очистка не требуется (EVP_cleanup() - deprecated)
     }
 
-    // Метод, реализующий шифрование файла в API класса CryptoGuardCtx.
-    void EncryptFileImpl(std::iostream &inStream, std::iostream &outStream, std::string_view password);
-
-    // Метод, реализующий дешифрование файла в API класса CryptoGuardCtx.
-    void DecryptFileImpl(std::iostream &inStream, std::iostream &outStream, std::string_view password);
+    // Метод, реализующий шифрование/дешифрование файла
+    void CryptFileImpl(std::iostream &inStream, std::iostream &outStream, std::string_view password, int doEncrypt);
 
     // Метод, реализующий подсчёт контрольной суммы файла в API класса CryptoGuardCtx.
     std::string CalculateChecksumImpl(std::iostream &inStream);
@@ -123,14 +120,11 @@ private:
         ERR_error_string_n(errCode, errBuf, sizeof(errBuf));
         return std::string(errBuf);
     }
-
-    // Метод, реализующий шифрование/дешифрование строкового потока файла
-    void DoCrypt(std::iostream &inStream, std::iostream &outStream, std::string_view password, int doEncrypt);
 };
 
-// Метод, реализующий шифрование/дешифрование строкового потока файла
-void CryptoGuardCtx::Impl::DoCrypt(std::iostream &inStream, std::iostream &outStream, std::string_view password,
-                                   int doEncrypt) {
+// Метод, реализующий шифрование/дешифрование файла
+void CryptoGuardCtx::Impl::CryptFileImpl(std::iostream &inStream, std::iostream &outStream, std::string_view password,
+                                         int doEncrypt) {
     // Подготовка входного и выходного потоков
     PrepareStreamForIO(inStream, true);    // к операции чтения
     PrepareStreamForIO(outStream, false);  // к операции записи
@@ -217,18 +211,6 @@ void CryptoGuardCtx::Impl::DoCrypt(std::iostream &inStream, std::iostream &outSt
     }
 }
 
-// Метод, реализующий шифрование файла в API класса CryptoGuardCtx.
-void CryptoGuardCtx::Impl::EncryptFileImpl(std::iostream &inStream, std::iostream &outStream,
-                                           std::string_view password) {
-    DoCrypt(inStream, outStream, password, 1);
-}
-
-// Метод, реализующий дешифрование файла в API класса CryptoGuardCtx.
-void CryptoGuardCtx::Impl::DecryptFileImpl(std::iostream &inStream, std::iostream &outStream,
-                                           std::string_view password) {
-    DoCrypt(inStream, outStream, password, 0);
-}
-
 // Метод, реализующий подсчёт контрольной суммы файла в API класса CryptoGuardCtx.
 std::string CryptoGuardCtx::Impl::CalculateChecksumImpl(std::iostream &inStream) {
     // Подготовка входного потока к операции чтения.
@@ -302,12 +284,12 @@ CryptoGuardCtx::~CryptoGuardCtx() = default;
 // === Методы-обертки, делегирующие вызовы API класса CryptoGuardCtx внутреннему классу Impl ===
 // Метод шифрования файла.
 void CryptoGuardCtx::EncryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) {
-    pImpl_->EncryptFileImpl(inStream, outStream, password);
+    pImpl_->CryptFileImpl(inStream, outStream, password, 1);
 }
 
 // Метод дешифрования файла.
 void CryptoGuardCtx::DecryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) {
-    pImpl_->DecryptFileImpl(inStream, outStream, password);
+    pImpl_->CryptFileImpl(inStream, outStream, password, 0);
 }
 
 // Метод подсчета контрольной суммы файла.

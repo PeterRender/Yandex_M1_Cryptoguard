@@ -6,7 +6,7 @@
 
 namespace CryptoGuard {
 
-// Класс
+// Класс, реализующий криптографическую обработку файлов
 class CryptoGuardCtx {
 public:
     // Конструктор по умолчанию.

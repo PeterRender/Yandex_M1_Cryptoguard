@@ -37,17 +37,19 @@ void ProgramOptions::Parse(int argc, char *argv[]) {
         parser.options(desc_).style(po::command_line_style::unix_style & ~po::command_line_style::allow_guessing);
 
         // Парсинг аргументов (если у какой-то опции нет аргумента, то бросается исключение)
-        po::variables_map vm;
+        po::variables_map vm;  // карта для хранения распознанных опций
         po::store(parser.run(), vm);
 
         // Обработка опции help
+        helpFlag_ = false;  // исходно флаг вывода справки опущен
+        // Если опция help есть в карте
         if (vm.count("help")) {
-            // Выводим справку и корректно завершаем программу
-            std::cout << desc_ << std::endl;
-            exit(0);
+            std::cout << desc_ << std::endl;  // выводим справку
+            helpFlag_ = true;                 // поднимаем флаг вывода справки
+            return;                           // корректно выходим из функции парсинга
         }
 
-        // Проверка наличия в мапе обязательных опций (если их нет, то бросается исключение)
+        // Проверка наличия в карте обязательных опций (если их нет, то бросается исключение)
         po::notify(vm);
 
         // Преобразуем аргумент опции command в enum
@@ -61,13 +63,13 @@ void ProgramOptions::Parse(int argc, char *argv[]) {
         // Получаем строку имени входного файла
         inputFile_ = vm["input"].as<std::string>();
 
-        // Флаги наличия в мапе опций output и password
+        // Флаги наличия в карте опций output и password
         bool gotOutFile = vm.count("output");
         bool gotPass = vm.count("password");
 
         // Для команд encrypt и decrypt нужны опции output и password
         if (command_ == COMMAND_TYPE::ENCRYPT || command_ == COMMAND_TYPE::DECRYPT) {
-            // Если в мапе нет опции output или опции password, то бросаем исключение
+            // Если в карте нет опции output или опции password, то бросаем исключение
             if (!gotOutFile || !gotPass) {
                 throw po::error("both options --output and --password are required for encrypt/decrypt commands");
             }

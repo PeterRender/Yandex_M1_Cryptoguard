@@ -26,13 +26,15 @@ public:
     void Parse(int argc, char *argv[]);
 
     // Методы доступа к параметрам приложения CryptoGuard
-    COMMAND_TYPE GetCommand() const { return command_; }       // возвращает идентификатор запущенной крипто-команды
+    bool GetHelpFlag() { return helpFlag_; }                   // возвращает флаг вывода справки
+    COMMAND_TYPE GetCommand() const { return command_; }       // возвращает идентификатор крипто-команды
     std::string GetInputFile() const { return inputFile_; }    // возвращает имя входного файла
     std::string GetOutputFile() const { return outputFile_; }  // возвращает имя файла-результата критообработки
     std::string GetPassword() const { return password_; }      // возвращает пароль для шифрования/дешифрования
 
 private:
-    COMMAND_TYPE command_;  // идентификатор запущенной крипто-команды
+    bool helpFlag_;         // флаг вывода справки
+    COMMAND_TYPE command_;  // идентификатор крипто-команды
 
     // Карта текстовых расшифровок идентификаторов крипто-команд приложения CryptoGuard
     const std::unordered_map<std::string_view, COMMAND_TYPE> commandMapping_ = {

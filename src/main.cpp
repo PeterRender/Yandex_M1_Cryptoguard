@@ -30,11 +30,16 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        // Создание объекта-хелпера, реализующего API приложения CryptoGuard
-        CryptoGuard::CryptoGuardCtx cryptoCtx;
+        // Если была выведена справка, то корректно завершаем программу
+        if (options.GetHelpFlag()) {
+            return 0;
+        }
 
-        // Задание краткого псевдонима для типа крипто-команды приложения CryptoGuard
+        // Псевдоним типа крипто-команды
         using COMMAND_TYPE = CryptoGuard::ProgramOptions::COMMAND_TYPE;
+
+        // Создание объекта-хелпера, криптографическую обработку файлов
+        CryptoGuard::CryptoGuardCtx cryptoCtx;
 
         // Обработка крипто-команды, полученной от пользователя
         switch (options.GetCommand()) {

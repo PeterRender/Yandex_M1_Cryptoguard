@@ -6,15 +6,17 @@
 TEST(ProgramOptions, HelpCheck) {
     const char *argv[] = {"./CryptoGuard", "--help"};
     CryptoGuard::ProgramOptions options;
+    testing::internal::CaptureStdout();  // начало захвата стандартного потока вывода
 
-    // Перехватываем вывод в stdout
-    testing::internal::CaptureStdout();
-    // Проверяем, что программа корректно завершится с кодом 0
-    EXPECT_EXIT(options.Parse(2, const_cast<char **>(argv)), testing::ExitedWithCode(0), "");
-    // Получаем перехваченный вывод
-    std::string output = testing::internal::GetCapturedStdout();
-    // Проверяем, что вывод был не пустой (была справка)
-    EXPECT_FALSE(output.empty());
+    // Парсинг не должен бросать исключение
+    EXPECT_NO_THROW(options.Parse(2, const_cast<char **>(argv)));
+
+    std::string outputStr = testing::internal::GetCapturedStdout();  // захваченная строка вывода
+
+    // В строке вывода должны быть ключевые слова справки
+    EXPECT_TRUE(outputStr.find("Allowed options") != std::string::npos && outputStr.find("help") != std::string::npos &&
+                outputStr.find("command") != std::string::npos && outputStr.find("input") != std::string::npos &&
+                outputStr.find("output") != std::string::npos && outputStr.find("password") != std::string::npos);
 }
 
 // Тест корректного парсинга команды --checksum (без лишних аргументов)
@@ -22,7 +24,7 @@ TEST(ProgramOptions, ChecksumValidCheck) {
     const char *argv[] = {"./CryptoGuard", "--command", "checksum", "--input", "origin.txt"};
     CryptoGuard::ProgramOptions options;
 
-    // Не должны бросаться исключения
+    // Парсинг не должен бросать исключение
     EXPECT_NO_THROW(options.Parse(5, const_cast<char **>(argv)));
     // Проверяем поля объекта после парсинга
     EXPECT_EQ(options.GetCommand(), CryptoGuard::ProgramOptions::COMMAND_TYPE::CHECKSUM);
@@ -55,7 +57,7 @@ TEST(ProgramOptions, EncryptValidCheck) {
                           "--output",      "encrypted.txt", "--password", "1234"};
     CryptoGuard::ProgramOptions options;
 
-    // Не должны бросаться исключения
+    // Парсинг не должен бросать исключение
     EXPECT_NO_THROW(options.Parse(9, const_cast<char **>(argv)));
 
     // После парсинга все поля должны быть заполнены
@@ -89,7 +91,7 @@ TEST(ProgramOptions, DecryptValidCheck) {
                           "--output",      "decrypted.txt", "--password", "1234"};
     CryptoGuard::ProgramOptions options;
 
-    // Не должны бросаться исключения
+    // Парсинг не должен бросать исключение
     EXPECT_NO_THROW(options.Parse(9, const_cast<char **>(argv)));
 
     // После парсинга все поля должны быть заполнены
